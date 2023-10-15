@@ -35,5 +35,9 @@ export default { postCreateAccount(firstname,lastname,email, pass) {
         console.log(error);
       });
 
+  },
+  getLogout() {
+    localStorage.clear();
+
   }
 }

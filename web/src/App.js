@@ -1,7 +1,7 @@
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 
-import Home from './components/home/Home.js';
+import Home from './pages/Home.js';
 
 import util from './util/helpers';
 
