@@ -5,28 +5,40 @@ from werkzeug.utils import secure_filename
 from boto3 import *
 from os import environ
 
+AWS_BUCKET_NAME= 'file-manager-anandu'
+AWS_ACCESS_KEY= 'AKIA3NWK44SU6O3CYJNR'
+AWS_SECRET_ACCESS_KEY= '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'
+AWS_S3_REGION_NAME= 'us-west-1'
+AWS_DOMAIN= 'd2ypu0iakhp6i3.cloudfront.net'
+AWS_CLOUDFRONT_KEY_ID= 'K3YYTWW4H1GK9'
+AWS_CLOUDFRONT_KEY='-----BEGIN RSA PRIVATE KEY-----\nMIIEogIBAAKCAQEAlr1LIQ3u8MTecQpD6lFjh//j6wLEfyKLHsgnncwEaDnW1Juo\n3SgO2lnkxJ0YW+6+5Cf3y1Ym4AAzDwccIBIeqQ4Qt90n1/b8XQ8mOIdROuk0kzHj\nV4zFYN0RJprbkhrhKYiT3DIlVadG/TF1IdVqGUr>'
+RDS_SCHEMA= 'project1'
+RDS_FILE_INFO= 'file_manager_info'
+RDS_USER_INFO= 'user_info'
+RDS_HOST= 'rds-db-instance.cnxz3dwfhpi6.us-west-1.rds.amazonaws.com'
+RDS_USERNAME= 'admin'
+RDS_PASSWORD= 'rdspassword123'
+RDS_DATABASE= ''
+RDS_PORT= 3306
+ADMIN = 'one_d@admin.com'
+SCHEMA = RDS_SCHEMA
+TABLE_FILE_INFO = RDS_FILE_INFO
+TABLE_USER_INFO = RDS_USER_INFO
+CF_URL = AWS_DOMAIN
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif','pdf'}
+
+
 s3 = boto3.client(
     "s3",
-    aws_access_key_id =    environ.get('AWS_ACCESS_KEY'),
-    aws_secret_access_key=environ.get('AWS_SECRET_ACCESS_KEY')
+    aws_access_key_id = AWS_ACCESS_KEY,
+    aws_secret_access_key= AWS_SECRET_ACCESS_KEY
 )
-
-ADMIN = 'one_d@admin.com'
-SCHEMA = environ.get('RDS_SCHEMA')
-TABLE_FILE_INFO = environ.get('RDS_FILE_INFO')
-TABLE_USER_INFO = environ.get('RDS_USER_INFO')
-CF_URL = environ.get('AWS_DOMAIN')
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif','pdf'}
 
 def upload_file_to_s3(file,file_desc,email):
     filename = secure_filename(file.filename)
     file_data = {}
     try:
-        s3.upload_fileobj(
-            file,
-            environ.get("AWS_BUCKET_NAME"),
-            filename
-        )
+        s3.upload_fileobj(file,AWS_BUCKET_NAME,filename)
     except Exception as e:
         message = "Error running query:{0} Generated error: {1}".format(filename,str(e))
         return False
@@ -41,10 +53,7 @@ def upload_file_to_s3(file,file_desc,email):
     return True
 
 def connect_mysql():
-    db = pymysql.connect(host = environ.get('RDS_HOST'), 
-                 user= environ.get('RDS_USERNAME'),
-                 password = environ.get('RDS_PASSWORD'), 
-                   database = environ.get('RDS_DATABASE'))
+    db = pymysql.connect(host = RDS_HOST, user= RDS_USERNAME, password = RDS_PASSWORD, database = RDS_DATABASE)
     return db
 
 def set_upsert_rds(query):
@@ -100,24 +109,48 @@ def get_file_names_rds(email):
     else:
         query = ("select id,file_name,file_desc,status,CONCAT('https:{0}/' ,file_name, '/')  as url ,file_uploaded_timestamp,last_updated_timestamp from {1}.{2} \
         where email = '{3}' and status in ('INSERT','MODIFIED')".format(CF_URL,SCHEMA,TABLE_FILE_INFO,email))
-    return get_info_rds(query)
+    data =  get_info_rds(query)
+    return data
 
 def get_user_details_rds(email):
     #functions to retrieve userdetails
     if email == ADMIN:
-        query = ("select CONCAT(firstname,' ',lastname) as user, 0 as total_files_uploaded, 0 as total_files_deleted ,email,last_updated_timestamp from {0}.{1}".format(SCHEMA,TABLE_USER_INFO))
+        query = ("""SELECT CONCAT(t1.firstname,' ',t1.lastname) as user, 
+                       COUNT(IF(t2.status IN ('INSERT','MODIFIED'), 1, NULL)) as total_files_uploaded,
+                       COUNT(IF(t2.status IN ('DELETE','ADMIN-DELETED'), 1, NULL)) as total_files_deleted,
+                       t1.email,
+                       t1.last_updated_timestamp
+                FROM {0}.{1} t1
+                LEFT JOIN {0}.{2} t2 ON t1.email = t2.email where t1.email != '{3}'
+                GROUP BY t1.email;
+                """).format(SCHEMA,TABLE_USER_INFO,TABLE_FILE_INFO,ADMIN)
         return get_info_rds(query)
     else:
         print("ACCESS DENIED!")
         return {}
+    
+def get_file_stats(email):
+    query = """ SELECT 'DELETED' as status, COUNT(1) as count FROM {0}.{1} WHERE status IN ('DELETE','ADMIN-DELETE')
+                UNION ALL
+                SELECT 'INSERTED', COUNT(1) FROM {0}.{1} WHERE status = 'INSERT' 
+                UNION ALL
+                SELECT 'UPDATED', COUNT(1) FROM {0}.{1} WHERE status = 'MODIFIED';""".format(SCHEMA,TABLE_FILE_INFO)
+    data = get_info_rds(query)
+    print(data)
+    return data[1][1],data[0][1],data[2][1]
 
 def delete_file_name_rds(file_name,email):
     #set filename to delete
     print('Initiating delete_file_name_rds')
-    if email == ADMIN:
-        status = 'ADMIN-DELETE'
-    else:
-        status = 'DELETE'
+    status = 'DELETE'
+    query = ("update {0}.{1} set status= '{2}', last_updated_timestamp = NOW() \
+    where email = '{3}' and file_name = '{4}'".format(SCHEMA,TABLE_FILE_INFO,status,email,file_name))
+    return set_upsert_rds(query)
+
+def delete_file_name_rds_admin(file_name,email):
+    #set filename to delete
+    print('Initiating delete_file_name_rds_admin')
+    status = 'ADMIN-DELETE'
     query = ("update {0}.{1} set status= '{2}', last_updated_timestamp = NOW() \
     where email = '{3}' and file_name = '{4}'".format(SCHEMA,TABLE_FILE_INFO,status,email,file_name))
     return set_upsert_rds(query)
@@ -154,7 +187,7 @@ def delete_file_s3(file_name,email):
     try:
         print("Initiating delete_file_s3!")
         s3.delete_object(
-            Bucket = environ.get("AWS_BUCKET_NAME"),
+            Bucket = AWS_BUCKET_NAME,
             Key = file_name
         )
     except Exception as e:
@@ -162,8 +195,6 @@ def delete_file_s3(file_name,email):
         return False
     else:
         message = 'Successfully deleted file'
-        if not delete_file_name_rds(file_name,email):
-            return False
     print(message)
     return True
 
@@ -179,22 +210,25 @@ def modify_file_s3(file,file_name,file_desc,email):
     try:
         #put apporach
         # s3.put_object(Body=file, 
-        #               Bucket=environ.get("AWS_BUCKET_NAME"), 
+        #               Bucket=AWS_BUCKET_NAME, 
         #               Key=file_name)
         #removing existing file
         print("Initiating modify_file_s3 - removing existing file!")
+        print("Deleting file!")
         s3.delete_object(
-            Bucket = environ.get("AWS_BUCKET_NAME"),
+            Bucket = AWS_BUCKET_NAME,
             Key = file_name
         )
         #replace with new file
+        print("Uploading file!")
         s3.upload_fileobj(
             file,
-            environ.get("AWS_BUCKET_NAME"),
+            AWS_BUCKET_NAME,
             file_name
         )
     except Exception as e:
         message = "Failed to modify {} file with error {}".format(file_name,str(e))
+        print(message)
         return False
     else:
         message = 'Successfully modified file'
@@ -204,4 +238,5 @@ def modify_file_s3(file,file_name,file_desc,email):
     return True
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    #return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return True
