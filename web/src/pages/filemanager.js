@@ -91,7 +91,7 @@ function Filemanager() {
           .then((response) => {
             console.log(response);
             if (response.status === 200) {
-              // window.location.reload();
+              window.location.reload();
             }
           })
           .catch(function (error) {

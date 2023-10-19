@@ -36,7 +36,7 @@ const File = (props) => {
                       <th>Name</th>
                       <th>Description</th>
                       <th>Status</th>
-                      <th>Created_at</th>
+                      <th>Created Date</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -54,14 +54,14 @@ const File = (props) => {
               </td>
               <td>{row[5]}</td>
               <td >
-              <Link to={`${row[4]}`} state={row}>
+              <a href={`${row[4].slice(0,-1)}`} target='_blank' download state={row}>
                   <button
                     type="button"
                     class="btn btn-secondary btn-sm "
                   >
                     <PiDownloadSimpleFill />
                   </button>
-                </Link>
+                </a>
                 
                 
                 
