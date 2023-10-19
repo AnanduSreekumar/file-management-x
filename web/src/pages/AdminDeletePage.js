@@ -14,7 +14,7 @@ const AdminDeletePage = () => {
     e.preventDefault();
     let email = localStorage.getItem("email");
     axios
-      .delete(constants.BASE_URL + `/delete_file_admin/${email}/${state[1]}`, {
+      .delete(constants.BASE_URL + `/deletefileS3Admin/${email}/${state[1]}`, {
         headers: {
           "Content-Type": "multipart/form-data",
         },

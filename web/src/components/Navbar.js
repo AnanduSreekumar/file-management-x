@@ -18,7 +18,7 @@ const Navbar = (props) => {
     <nav class="navbar navbar-expand-lg bg-body-tertiary " data-bs-theme="dark">
       <div class="container-fluid">
         <a class="navbar-brand" href="/filemanager">
-          One-D
+          ONE-D
         </a>
         <button
           class="navbar-toggler"
